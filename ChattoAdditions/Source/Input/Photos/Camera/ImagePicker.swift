@@ -24,26 +24,25 @@
 
 import UIKit
 
-public protocol ChatLayoutConfigurationProtocol {
-    var contentInsets: UIEdgeInsets { get }
-    var scrollIndicatorInsets: UIEdgeInsets { get }
+protocol ImagePickerDelegate : class {
+    func imagePickerDidFinishPickingImage(_ image: UIImage?)
+    func imagePickerDidCancel()
 }
 
-public struct ChatLayoutConfiguration: ChatLayoutConfigurationProtocol {
-    public let contentInsets: UIEdgeInsets
-    public let scrollIndicatorInsets: UIEdgeInsets
-
-    public init(contentInsets: UIEdgeInsets, scrollIndicatorInsets: UIEdgeInsets) {
-        self.contentInsets = contentInsets
-        self.scrollIndicatorInsets = scrollIndicatorInsets
-    }
+protocol ImagePicker {
+    var controller: UIViewController { get }
 }
 
-extension ChatLayoutConfiguration {
-    static var defaultConfiguration: ChatLayoutConfiguration {
-        let contentInsets = UIEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
-        let scrollIndicatorInsets = UIEdgeInsets.zero
-        return ChatLayoutConfiguration(contentInsets: contentInsets,
-                                       scrollIndicatorInsets: scrollIndicatorInsets)
-    }
+protocol ImagePickerFactory {
+    func pickerController(_ delegate: ImagePickerDelegate) -> ImagePicker?
+}
+
+struct ImagePickerStore {
+    static var factory: ImagePickerFactory = {
+#if !(arch(i386) || arch(x86_64))
+        return DeviceImagePickerFactory()
+#else
+        return SimulatorImagePickerFactory()
+#endif
+    }()
 }

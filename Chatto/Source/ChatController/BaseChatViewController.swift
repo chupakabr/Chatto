@@ -30,7 +30,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
 
     open var layoutConfiguration: ChatLayoutConfigurationProtocol = ChatLayoutConfiguration.defaultConfiguration {
         didSet {
-            self.adjustCollectionViewInsets()
+            self.adjustCollectionViewInsets(shouldUpdateContentOffset: false)
         }
     }
 
@@ -94,6 +94,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
         super.viewDidLoad()
         self.addCollectionView()
         self.addInputViews()
+        self.addBottomSpaceView()
         self.setupKeyboardTracker()
         self.setupTapGestureRecognizer()
     }
@@ -169,6 +170,19 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
         self.inputContainer.addConstraint(NSLayoutConstraint(item: self.inputContainer, attribute: .bottom, relatedBy: .equal, toItem: inputView, attribute: .bottom, multiplier: 1, constant: 0))
         self.inputContainer.addConstraint(NSLayoutConstraint(item: self.inputContainer, attribute: .trailing, relatedBy: .equal, toItem: inputView, attribute: .trailing, multiplier: 1, constant: 0))
     }
+
+    private func addBottomSpaceView() {
+        self.bottomSpaceView = UIView(frame: CGRect.zero)
+        self.bottomSpaceView.autoresizingMask = UIViewAutoresizing()
+        self.bottomSpaceView.translatesAutoresizingMaskIntoConstraints = false
+        self.bottomSpaceView.backgroundColor = UIColor.white
+        self.view.addSubview(self.bottomSpaceView)
+        self.view.addConstraint(NSLayoutConstraint(item: self.bottomSpaceView, attribute: .top, relatedBy: .greaterThanOrEqual, toItem: self.inputContainer, attribute: .bottom, multiplier: 1, constant: 0))
+        self.view.addConstraint(NSLayoutConstraint(item: self.view, attribute: .leading, relatedBy: .equal, toItem: self.bottomSpaceView, attribute: .leading, multiplier: 1, constant: 0))
+        self.view.addConstraint(NSLayoutConstraint(item: self.view, attribute: .trailing, relatedBy: .equal, toItem: self.bottomSpaceView, attribute: .trailing, multiplier: 1, constant: 0))
+        self.view.addConstraint(NSLayoutConstraint(item: self.view, attribute: .bottom, relatedBy: .equal, toItem: self.bottomSpaceView, attribute: .bottom, multiplier: 1, constant: 0))
+    }
+
     private func setupInputContainerBottomConstraint() {
         // If we have been pushed on nav controller and hidesBottomBarWhenPushed = true, then ignore bottomLayoutMargin
         // because it has incorrect value when we actually have a bottom bar (tabbar)
@@ -189,9 +203,9 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
 
     var isAdjustingInputContainer: Bool = false
     open func setupKeyboardTracker() {
-        let layoutBlock = { [weak self] (bottomMargin: CGFloat) in
+        let layoutBlock = { [weak self] (bottomMargin: CGFloat, keyboardStatus: KeyboardStatus) in
             guard let sSelf = self else { return }
-            sSelf.handleKeyboardPositionChange(bottomMargin: bottomMargin)
+            sSelf.handleKeyboardPositionChange(bottomMargin: bottomMargin, keyboardStatus: keyboardStatus)
         }
         self.keyboardTracker = KeyboardTracker(viewController: self, inputContainer: self.inputContainer, layoutBlock: layoutBlock, notificationCenter: self.notificationCenter)
 
@@ -199,7 +213,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
 
     }
 
-    open func handleKeyboardPositionChange(bottomMargin: CGFloat) {
+    open func handleKeyboardPositionChange(bottomMargin: CGFloat, keyboardStatus: KeyboardStatus) {
         self.isAdjustingInputContainer = true
         self.inputContainerBottomConstraint.constant = max(bottomMargin, self.bottomLayoutGuide.length)
         self.view.layoutIfNeeded()
@@ -213,7 +227,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
     override open func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
-        self.adjustCollectionViewInsets()
+        self.adjustCollectionViewInsets(shouldUpdateContentOffset: true)
         self.keyboardTracker.adjustTrackingViewSizeIfNeeded()
 
         if self.isFirstLayout {
@@ -223,7 +237,16 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
         }
     }
 
-    private func adjustCollectionViewInsets() {
+    public var allContentFits: Bool {
+        let inputHeightWithKeyboard = self.view.bounds.height - self.inputContainer.frame.minY
+        let insetTop = self.topLayoutGuide.length + self.layoutConfiguration.contentInsets.top
+        let insetBottom = self.layoutConfiguration.contentInsets.bottom + inputHeightWithKeyboard
+        let availableHeight = self.collectionView.bounds.height - (insetTop + insetBottom)
+        let contentSize = self.collectionView.collectionViewLayout.collectionViewContentSize
+        return availableHeight >= contentSize.height
+    }
+
+    private func adjustCollectionViewInsets(shouldUpdateContentOffset: Bool) {
         let isInteracting = self.collectionView.panGestureRecognizer.numberOfTouches > 0
         let isBouncingAtTop = isInteracting && self.collectionView.contentOffset.y < -self.collectionView.contentInset.top
         if isBouncingAtTop { return }
@@ -232,12 +255,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
         let newInsetBottom = self.layoutConfiguration.contentInsets.bottom + inputHeightWithKeyboard
         let insetBottomDiff = newInsetBottom - self.collectionView.contentInset.bottom
         let newInsetTop = self.topLayoutGuide.length + self.layoutConfiguration.contentInsets.top
-
         let contentSize = self.collectionView.collectionViewLayout.collectionViewContentSize
-        let allContentFits: Bool = {
-            let availableHeight = self.collectionView.bounds.height - (newInsetTop + newInsetBottom)
-            return availableHeight >= contentSize.height
-        }()
 
         let newContentOffsetY: CGFloat = {
             let minOffset = -newInsetTop
@@ -260,9 +278,10 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
             return currentInsets
         }()
 
-        let inputIsAtBottom = self.view.bounds.maxY - self.inputContainer.frame.maxY <= 0
+        guard shouldUpdateContentOffset else { return }
 
-        if allContentFits {
+        let inputIsAtBottom = self.view.bounds.maxY - self.inputContainer.frame.maxY <= 0
+        if self.allContentFits {
             self.collectionView.contentOffset.y = -self.collectionView.contentInset.top
         } else if !isInteracting || inputIsAtBottom {
             self.collectionView.contentOffset.y = newContentOffsetY
@@ -279,6 +298,7 @@ open class BaseChatViewController: UIViewController, UICollectionViewDataSource,
     var autoLoadingEnabled: Bool = false
     var accessoryViewRevealer: AccessoryViewRevealer!
     public private(set) var inputContainer: UIView!
+    public private(set) var bottomSpaceView: UIView!
     var presenterFactory: ChatItemPresenterFactoryProtocol!
     let presentersByCell = NSMapTable<UICollectionViewCell, AnyObject>(keyOptions: .weakMemory, valueOptions: .weakMemory)
     var visibleCells: [IndexPath: UICollectionViewCell] = [:] // @see visibleCellsAreValid(changes:)

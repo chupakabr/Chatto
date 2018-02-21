@@ -22,28 +22,35 @@
  THE SOFTWARE.
 */
 
-import UIKit
+class DeviceImagePicker : NSObject, ImagePicker, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    let controller: UIViewController
+    private weak var delegate: ImagePickerDelegate?
 
-public protocol ChatLayoutConfigurationProtocol {
-    var contentInsets: UIEdgeInsets { get }
-    var scrollIndicatorInsets: UIEdgeInsets { get }
-}
+    init(_ delegate: ImagePickerDelegate) {
+        let pickerController = UIImagePickerController()
+        self.controller = pickerController
+        self.delegate = delegate
+        super.init()
+        pickerController.delegate = self
+        pickerController.sourceType = .camera
+    }
 
-public struct ChatLayoutConfiguration: ChatLayoutConfigurationProtocol {
-    public let contentInsets: UIEdgeInsets
-    public let scrollIndicatorInsets: UIEdgeInsets
+    @objc
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingImage image: UIImage, editingInfo: [String: AnyObject]?) {
+        self.delegate?.imagePickerDidFinishPickingImage(image)
+    }
 
-    public init(contentInsets: UIEdgeInsets, scrollIndicatorInsets: UIEdgeInsets) {
-        self.contentInsets = contentInsets
-        self.scrollIndicatorInsets = scrollIndicatorInsets
+    @objc
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        self.delegate?.imagePickerDidCancel()
     }
 }
 
-extension ChatLayoutConfiguration {
-    static var defaultConfiguration: ChatLayoutConfiguration {
-        let contentInsets = UIEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
-        let scrollIndicatorInsets = UIEdgeInsets.zero
-        return ChatLayoutConfiguration(contentInsets: contentInsets,
-                                       scrollIndicatorInsets: scrollIndicatorInsets)
+class DeviceImagePickerFactory: ImagePickerFactory {
+    func pickerController(_ delegate: ImagePickerDelegate) -> ImagePicker? {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            return nil
+        }
+        return DeviceImagePicker(delegate)
     }
 }
